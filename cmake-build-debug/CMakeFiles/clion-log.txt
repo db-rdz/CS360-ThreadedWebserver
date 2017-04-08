@@ -1,0 +1,15 @@
+/home/benjamin/clion-2017.1/bin/cmake/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" /home/benjamin/Documents/BYU/CS-360/Labs/server
+-- Configuring done
+CMake Error at CMakeLists.txt:12 (add_executable):
+  Cannot find source file:
+
+    http-parser.c.cpp
+
+  Tried extensions .c .C .c++ .cc .cpp .cxx .m .M .mm .h .hh .h++ .hm .hpp
+  .hxx .in .txx
+
+
+CMake Error: CMake can not determine linker language for target: server
+CMake Error: Cannot determine link language for target "server".
+-- Generating done
+-- Build files have been written to: /home/benjamin/Documents/BYU/CS-360/Labs/server/cmake-build-debug
