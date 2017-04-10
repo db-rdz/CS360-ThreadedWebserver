@@ -43,10 +43,10 @@ RM = /home/benjamin/clion-2017.1/bin/cmake/bin/cmake -E remove -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /home/benjamin/Documents/BYU/CS-360/Labs/server
+CMAKE_SOURCE_DIR = /home/benjamin/Documents/BYU/CS-360/Labs/ThreadedServer
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /home/benjamin/Documents/BYU/CS-360/Labs/server/cmake-build-debug
+CMAKE_BINARY_DIR = /home/benjamin/Documents/BYU/CS-360/Labs/ThreadedServer/cmake-build-debug
 
 # Include any dependencies generated for this target.
 include CMakeFiles/server.dir/depend.make
@@ -66,6 +66,6 @@ CMakeFiles/server.dir/clean:
 .PHONY : CMakeFiles/server.dir/clean
 
 CMakeFiles/server.dir/depend:
-	cd /home/benjamin/Documents/BYU/CS-360/Labs/server/cmake-build-debug && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /home/benjamin/Documents/BYU/CS-360/Labs/server /home/benjamin/Documents/BYU/CS-360/Labs/server /home/benjamin/Documents/BYU/CS-360/Labs/server/cmake-build-debug /home/benjamin/Documents/BYU/CS-360/Labs/server/cmake-build-debug /home/benjamin/Documents/BYU/CS-360/Labs/server/cmake-build-debug/CMakeFiles/server.dir/DependInfo.cmake --color=$(COLOR)
+	cd /home/benjamin/Documents/BYU/CS-360/Labs/ThreadedServer/cmake-build-debug && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /home/benjamin/Documents/BYU/CS-360/Labs/ThreadedServer /home/benjamin/Documents/BYU/CS-360/Labs/ThreadedServer /home/benjamin/Documents/BYU/CS-360/Labs/ThreadedServer/cmake-build-debug /home/benjamin/Documents/BYU/CS-360/Labs/ThreadedServer/cmake-build-debug /home/benjamin/Documents/BYU/CS-360/Labs/ThreadedServer/cmake-build-debug/CMakeFiles/server.dir/DependInfo.cmake --color=$(COLOR)
 .PHONY : CMakeFiles/server.dir/depend
 

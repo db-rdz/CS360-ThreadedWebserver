@@ -14,7 +14,7 @@
 
 
 void usage(char* name);
-int init_tcp(char* path, char* port, int verbose);
+int init_tcp(char* path, char* port, int verbose,  int threads, int queueSize);
 
 void my_sigchld_handler(int sig)
 {
@@ -43,11 +43,14 @@ int main(int argc, char* argv[]) {
 	char* config_path = NULL;
 
 	int verbose_flag = 0;
-	port = DEFAULT_PORT;
+    int threads;
+    int queueSize;
+    port = DEFAULT_PORT;
 	config_path = DEFAULT_CONFIG;
 
+
 	int c;
-	while ((c = getopt(argc, argv, "vp:c:")) != -1) {
+	while ((c = getopt(argc, argv, "vp:c:t:q:")) != -1) {
 		switch (c) {
 			case 'v':
 				verbose_flag = 1;
@@ -57,7 +60,12 @@ int main(int argc, char* argv[]) {
 				break;
 			case 'c':
 				config_path = optarg;
-
+                break;
+            case 't':
+                threads = atoi(optarg);
+                break;
+            case 'q':
+                queueSize = atoi(optarg);
 				break;
 			case '?':
 				if (optopt == 'p' || optopt == 'c') {
@@ -72,7 +80,7 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-    init_tcp(config_path, port, verbose_flag);
+    init_tcp(config_path, port, verbose_flag, threads, queueSize);
 
 	/* Instantiate your server class or call your server run function here */
 	/* example: http_server_run(config_path, port, verbose_flag); */

@@ -6,18 +6,87 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netdb.h>
+#include <pthread.h>
+#include <semaphore.h>
 #include "http-parser.h"
+#include "queue.h"
 
 #define BUFFER_MAX	1024
 
-void parseConfig(char *filename);
+//------------------------CONF VARS-----------------------------//
+int _queueSize;
+int _threadNumber;
+pthread_t* threads;
 
+//--------------------MUTEX & SEMAPHORES-----------------------//
+pthread_mutex_t m;
+sem_t _queueEmptySpots;
+sem_t _clientsInQueue;
+
+//---------------------------QUEUE-----------------------------//
+struct queue _clientQueue;
+
+//-------------------------PARAMS STRUCT-----------------------//
+typedef struct param {
+    int id;
+} param_t;
+
+void parseConfig(char *filename);
 void handle_sigchld(int sig);
 int create_server_socket(char* port, int protocol);
-void handle_client(int sock, struct sockaddr_storage client_addr, socklen_t addr_len);
+void handle_client(int sock);
 
-int init_tcp(char* path, char* port, int verbose) {
+int sem_wait(sem_t *sem);
+int sem_post(sem_t *sem);
+int sem_init(sem_t *sem, int pshared, unsigned int value);
 
+void consumeClient(){
+    printf("\nCONSUME CLIENT FUCNTION\n");
+    while(1){
+        printf("  sem_wait called\n");
+        sem_wait(&_clientsInQueue);
+        pthread_mutex_lock(&m);
+        printf("  Getting client from queue\n");
+        struct node c = popQueue(&_clientQueue);
+        pthread_mutex_unlock(&m);
+        sem_post(&_queueEmptySpots);
+        printf("   Handling client: %i\n", c.client);
+        printf("  Size of the queue is: %i", _clientQueue.size);
+            handle_client(c.client);
+    }
+}
+
+
+void createWorkerThreads(){
+    printf("\nCREATING WORKER THREADS\n");
+    threads = NULL;
+    threads = (pthread_t*)malloc(_threadNumber * sizeof(pthread_t));
+    for (int i = 0; i < _threadNumber; i++) {
+        printf("  thread number %i created\n", i);
+        param_t* param = malloc(sizeof(param_t));
+        param->id = i;
+        pthread_create(&threads[i], NULL, consumeClient, (void*)param);
+    }
+}
+
+int init_tcp(char* path, char* port, int verbose, int threads, int queueSize) {
+
+    //------------------------------INIT MUTEX AND SEMAPHORES-------------------------//
+    pthread_mutex_init(&m, NULL);
+    sem_init(&_queueEmptySpots, 0, queueSize);
+    sem_init(&_clientsInQueue, 0, 0);
+
+    //-----------------SET UP GLOBAL THREAD NUMBER AND QUEUE SIZE---------------------//
+    _queueSize = queueSize;
+    _threadNumber = threads;
+
+    //-------------------------------SETUP CLIENT QUEUE--------------------------------//
+    _clientQueue = newQueue();
+
+    //---------------------------CREATE WORKER THREADS--------------------------------//
+    createWorkerThreads();
+
+    //---------------------------SET UP OTHER VARIABLES-------------------------------//
 	verbose_flag = verbose;
 	int sock = create_server_socket(port, SOCK_STREAM);
 	parseConfig(path);
@@ -25,16 +94,25 @@ int init_tcp(char* path, char* port, int verbose) {
 	while (1) {
 		struct sockaddr_storage client_addr;
 		socklen_t client_addr_len = sizeof(client_addr);
+
 		int client = accept(sock, (struct sockaddr*)&client_addr, &client_addr_len);
+
 		if (client == -1) {
 			perror("Connection Failed at function: accept");
 			continue;
 		}
 		else{
-			pid_t pid = fork();
-			if(pid == 0){
-				handle_client(client, client_addr, client_addr_len);
-			}
+            printf("\nGOT CLIENT\n");
+            sem_wait(&_queueEmptySpots);
+            printf(" Free space in queue available\n");
+            pthread_mutex_lock(&m);
+            printf("  Pushing client %i to the queue\n", client);
+            pushQueue(&_clientQueue, client);
+            printf("  Size of the queue is: %i", _clientQueue.size);
+            //handle_client(client, client_addr, client_addr_len);
+            pthread_mutex_unlock(&m);
+            sem_post(&_clientsInQueue);
+
 		}
 	}
 	return 0;
@@ -58,19 +136,12 @@ void resetParsingHeaderFlags(){
     header_index = 0;
 }
 
-void handle_client(int sock, struct sockaddr_storage client_addr, socklen_t addr_len) {
+void handle_client(int sock) {
 
 	unsigned char buffer[BUFFER_MAX];
 	char client_hostname[NI_MAXHOST];
 	char client_port[NI_MAXSERV];
 
-	int ret = getnameinfo((struct sockaddr*)&client_addr, addr_len, client_hostname,
-		       NI_MAXHOST, client_port, NI_MAXSERV, 0);
-
-	if (ret != 0) {
-		fprintf(stderr, "Failed in getnameinfo: %s\n", gai_strerror(ret));
-	}
-	if(verbose_flag) printf("\nGot a connection from %s:%s\n", client_hostname, client_port);
 	//You gotta receive until you see the double carriage return
 	//After that you can check for content length and know if you are done or not.
     resetParsingHeader();
@@ -81,11 +152,11 @@ void handle_client(int sock, struct sockaddr_storage client_addr, socklen_t addr
 		if (bytes_read == 0) {
 			if(verbose_flag) printf("Peer disconnected\n");
 			close(sock);
-            exit(EXIT_SUCCESS);
+            break;
 		}
 		if (bytes_read < 0) {
 			perror("recv");
-			continue;
+			break;
 		}
 
 		buffer[bytes_read] = '\0';

@@ -1,1 +1,0 @@
-/usr/bin/c++   -g   CMakeFiles/server.dir/config-parse.c.o CMakeFiles/server.dir/main.c.o CMakeFiles/server.dir/tcp-server.c.o CMakeFiles/server.dir/http-parser.c.cpp.o  -o server 
