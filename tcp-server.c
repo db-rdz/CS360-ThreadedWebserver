@@ -13,6 +13,9 @@
 
 #define BUFFER_MAX	1024
 
+//--------------------------FLAGS-------------------------------//
+int _keepAccepting;
+
 //------------------------CONF VARS-----------------------------//
 int _queueSize;
 int _threadNumber;
@@ -69,6 +72,12 @@ void createWorkerThreads(){
     }
 }
 
+void killThreads(){
+    for(int i = 0; i < _threadNumber; i++){
+        pthread_kill(threads[i], SIGINT);
+    }
+}
+
 int init_tcp(char* path, char* port, int verbose, int threads, int queueSize) {
 
     //------------------------------INIT MUTEX AND SEMAPHORES-------------------------//
@@ -88,16 +97,25 @@ int init_tcp(char* path, char* port, int verbose, int threads, int queueSize) {
 
     //---------------------------SET UP OTHER VARIABLES-------------------------------//
 	verbose_flag = verbose;
+    _keepAccepting = 1;
+
 	int sock = create_server_socket(port, SOCK_STREAM);
 	parseConfig(path);
 
-	while (1) {
+	while (_keepAccepting) {
 		struct sockaddr_storage client_addr;
 		socklen_t client_addr_len = sizeof(client_addr);
 
 		int client = accept(sock, (struct sockaddr*)&client_addr, &client_addr_len);
 
 		if (client == -1) {
+
+            if (errno == EINTR) { /* this means we were interrupted by our signal handler */
+                if (g_running == 0) { /* g_running is set to 0 by the SIGINT handler we made */
+                    // FREE MEMORY AND EXIT
+                }
+            }
+
 			perror("Connection Failed at function: accept");
 			continue;
 		}
@@ -115,25 +133,28 @@ int init_tcp(char* path, char* port, int verbose, int threads, int queueSize) {
 
 		}
 	}
+
+    //SEND PTHREAD KILL TO WORKERS
+    killThreads();
 	return 0;
 }
 
-void resetParsingHeader(){
-    parsing_request.is_header_ready = 0;
-    parsing_request.is_body_ready = 0;
-    parsing_request.content_length = 0;
-    parsing_request.parsed_body = 0;
-    parsing_request.responseFlag = 0;
-    parsing_request.dynamicContent = NON_DYNAMIC;
-    parsing_request.byte_range = 0;
-    parsing_request.is_header_parsed = 0;
-    parsing_request.is_body_parsed = 0;
-    parsing_request.fragmented_line_waiting = 0;
+void resetParsingHeader(struct request *r){
+    r->is_header_ready = 0;
+    r->is_body_ready = 0;
+    r->content_length = 0;
+    r->parsed_body = 0;
+    r->responseFlag = 0;
+    r->dynamicContent = NON_DYNAMIC;
+    r->byte_range = 0;
+    r->is_header_parsed = 0;
+    r->is_body_parsed = 0;
+    r->fragmented_line_waiting = 0;
 }
 
-void resetParsingHeaderFlags(){
-    first_line_read = 0;
-    header_index = 0;
+void resetParsingHeaderFlags(struct request *r){
+    r->first_line_read = 0;
+    r->header_index = 0;
 }
 
 void handle_client(int sock) {
@@ -144,8 +165,11 @@ void handle_client(int sock) {
 
 	//You gotta receive until you see the double carriage return
 	//After that you can check for content length and know if you are done or not.
-    resetParsingHeader();
-    resetParsingHeaderFlags();
+
+    struct request parsing_request;
+    resetParsingHeader(&parsing_request);
+    resetParsingHeaderFlags(&parsing_request);
+
 
 	while (1) {
 		int bytes_read = recv(sock, buffer, BUFFER_MAX-1, 0);
@@ -158,7 +182,6 @@ void handle_client(int sock) {
 			perror("recv");
 			break;
 		}
-
 		buffer[bytes_read] = '\0';
 		if(verbose_flag) printf("RECEIVED:\n  %s\n", buffer);
 
@@ -186,8 +209,8 @@ void handle_client(int sock) {
 
         sanitize_path(&parsing_request);
         executeRequest(&parsing_request, sock);
-        resetParsingHeader();
-        resetParsingHeaderFlags();
+        resetParsingHeader(&parsing_request);
+        resetParsingHeaderFlags(&parsing_request);
 	}
 }
 

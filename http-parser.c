@@ -4,15 +4,6 @@
 
 #include "http-parser.h"
 
-char* concat(const char *s1, const char *s2)
-{
-    char *result = malloc(strlen(s1)+strlen(s2)+1);//+1 for the zero-terminator
-    //in real code you would check for errors in malloc here
-    strcpy(result, s1);
-    strcat(result, s2);
-    return result;
-}
-
 void stripQueryString(struct request *r){
     r->vars_entries = 0;
 
@@ -44,11 +35,11 @@ void sanitize_path(struct request *r){
     //Find the location for the host in the config file variables.
     for(int i = 0; i < r->header_entries; i++){
 
-        if(strcmp(parsing_request.hlines[i].key, "Host:") == 0){
+        if(strcmp(r->hlines[i].key, "Host:") == 0){
             if(verbose_flag) printf("  Found Host Key in Headers. Now searching for Key Hosts in config file\n");
 
             for(int j = 0; j < number_of_host_entries; j++){
-                if(strstr(parsing_request.hlines[i].value, hosts[j].name)){
+                if(strstr(r->hlines[i].value, hosts[j].name)){
                     strcpy(host, hosts[j].value);
                     if(verbose_flag) printf("  the location for the host is: %s \n", host);
                     break;
@@ -59,10 +50,10 @@ void sanitize_path(struct request *r){
         }
     }
     if(strcmp(r->rl.path, "/") == 0){
-        strcpy(r->rl.path, concat(host, "/index.html"));
+        strcpy(r->rl.path, strcat(host, "/index.html"));
     }
     else{
-        strcpy(r->rl.path, concat(host, r->rl.path));
+        strcpy(r->rl.path, strcat(host, r->rl.path));
     }
     if(verbose_flag) printf("  Final path of file is: %s \n", r->rl.path);
 }
@@ -87,45 +78,45 @@ int isBodyComplete(unsigned char buffer[BUFFER_MAX]){
     return 0;
 }
 
-void parseRequestLine(char* currentLine){
+void parseRequestLine(char* currentLine, struct request *r){
     struct request_line parsing_request_line; //
     if (sscanf(currentLine, "%s %s %s",
                parsing_request_line.type, parsing_request_line.path, parsing_request_line.http_v) == 3) {
-        first_line_read = 1;
-        parsing_request.rl = parsing_request_line;
+        r->first_line_read = 1;
+        r->rl = parsing_request_line;
     }
     else{
         if(verbose_flag) printf("INVALID REQUEST LINE\n");
         strcpy(parsing_request_line.type, "GET");
         strcpy(parsing_request_line.path, "/invalid.html");
         strcpy(parsing_request_line.type, "HTTP/1.1");
-        parsing_request.responseFlag = BAD_REQUEST;
+        r->responseFlag = BAD_REQUEST;
     }
 }
 
-void extractRange(char *range){
+void extractRange(char *range, struct request *r ){
     if(verbose_flag) printf("Extracting range from: %s.\n", range);
     char *spointer = strchr(range, '=');
     spointer++;
     strcpy(range, spointer);
     spointer = strchr(range, '-');
     *spointer = '\0';
-    parsing_request.from = atoi(range);
+    r->from = atoi(range);
     *spointer++ = '-';
     if(spointer) {
-        parsing_request.to = atoi(spointer);
-        if(verbose_flag) printf("Found range from %i to %i\n", parsing_request.from, parsing_request.to);
+        r->to = atoi(spointer);
+        if(verbose_flag) printf("Found range from %i to %i\n", r->from, r->to);
     }
 }
 
-void parseHeaderLine(char* currentLine){
+void parseHeaderLine(char* currentLine, struct request *r){
     struct header parsing_header;
     if (sscanf(currentLine, "%s %s", parsing_header.key, parsing_header.value) == 2) {
-        parsing_request.hlines[header_index++] = parsing_header;
+        r->hlines[r->header_index++] = parsing_header;
 
         if(strcmp(parsing_header.key, "Range:") == 0){
-            parsing_request.byte_range = 1;
-            extractRange(&parsing_header.value[0]);
+            r->byte_range = 1;
+            extractRange(&parsing_header.value[0], r);
         }
     }
 }
@@ -148,18 +139,18 @@ void parseHeader(unsigned char buffer[BUFFER_MAX], struct request *r){
 
             if(r->fragmented_line_waiting){
                 strcat(r->incompleteLine,currentLine);
-                if(!first_line_read){
-                    parseRequestLine(r->incompleteLine);
+                if(!r->first_line_read){
+                    parseRequestLine(r->incompleteLine, r);
                 }
                 else{
-                    parseHeaderLine(r->incompleteLine);
+                    parseHeaderLine(r->incompleteLine, r);
                 }
             }
-            if (!first_line_read) {
-                parseRequestLine(currentLine);
+            if (!r->first_line_read) {
+                parseRequestLine(currentLine, r);
             }
             else {
-                parseHeaderLine(currentLine);
+                parseHeaderLine(currentLine, r);
             }
 
             if(verbose_flag) printf("  parsed the line: %s \n", currentLine);
@@ -167,7 +158,7 @@ void parseHeader(unsigned char buffer[BUFFER_MAX], struct request *r){
             currentLine = nextLine ? (nextLine + 2) : NULL;
         }
     }
-    parsing_request.header_entries = header_index;
+    r->header_entries = r->header_index;
 }
 
 void getBodyContentLength(struct request *r){
@@ -289,14 +280,18 @@ void buildResponseHeader(struct request *r, char *send_buffer){
         if(errno == EACCES){
             strcpy(responseCode,"403 Forbidden");
             strcpy(r->rl.path, "www/forbidden.html");
-        }else {
+            printf("\n\n\nNOT ACCESS\n\n\n");
+        }else if(errno == ENOENT || errno == ENOTDIR){
             strcpy(responseCode, "404 Not Found");
             strcpy(r->rl.path, "www/notfound.html");
             path = (char *) &r->rl.path;
+            printf("\n\n\nNOT FOUND\n\n\n");
         }
+
     }
     else{
         strcpy(responseCode,"200 OK");
+        fclose(sendFile);
     }
 
     //----------RE-READ THE FILE IN CASE PATH CHANGED---------//
@@ -432,6 +427,7 @@ void getCGIResource(struct request *r, FILE** sendFile, int sock){
 
         sendResponseHeader(&contentHeader, sock);
         sendResponseHeader(cgi_buffer_start, sock);
+        free(cgi_buffer);
         return;
     }
 
@@ -510,6 +506,7 @@ void sendResponse(char *send_buffer, int sock, struct request *r){
         while( numread > 0 );
     }
     if(verbose_flag) printf("  Total Bytes Sent: %i\n", total_bytes_sent);
+    fclose(sendFile);
 }
 
 void executeGet(struct request *r, int sock){

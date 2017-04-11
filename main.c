@@ -30,14 +30,21 @@ void my_sigchld_handler(int sig)
        printf("REAPED CHILD PROCESS WITH ID: %i", p);
     }
 }
+
+void inthandler(int sig)
+{
+    _keepAccepting = 0;
+}
+
 int main(int argc, char* argv[]) {
 
     struct sigaction sa;
 
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = my_sigchld_handler;
-
     sigaction(SIGCHLD, &sa, NULL);
+
+    signal(SIGINT, inthandler);
 
 	char* port = NULL;
 	char* config_path = NULL;

@@ -62,13 +62,12 @@ struct request{
     int responseFlag;   // Tells you if there is any error with the request.
     int dynamicContent; // Tells you if the content is dynamic.
     int byte_range;     // Tells you if the request is byte ranged.
+    int first_line_read;
+    int header_index;
 };
 
 //-----------------------------HTTP REQUEST PARSER FLAGS---------------------------------//
 //This tells the http parser if the first line being read if the first line of the request.
-int first_line_read;
-int header_index;
-struct request parsing_request;
 
 
 
@@ -77,8 +76,8 @@ void sanitize_path(struct request *r);
 int isHeaderComplete(unsigned char buffer[BUFFER_MAX]);
 int isBodyComplete(unsigned char buffer[BUFFER_MAX]);
 
-void parseRequestLine(char* currentLine);
-void parseHeaderLine(char* currentLine);
+void parseRequestLine(char* currentLine, struct request *r);
+void parseHeaderLine(char* currentLine, struct request *r);
 void parseHeader(unsigned char buffer[BUFFER_MAX], struct request *r);
 void parseRequest(unsigned char buffer[BUFFER_MAX], struct request *r);
 void parseBody(unsigned char buffer[BUFFER_MAX], struct request *r);
