@@ -28,9 +28,11 @@ void pushQueue(struct queue* q, int client){
 
 struct node popQueue(struct queue* q){
 
-    struct node headNode;
+    struct node headNodeCopy;
+    struct node* headNodeAddress;
     if(q->size != 0){
-        headNode = *q->head;
+        headNodeCopy = *q->head;
+        headNodeAddress = q->head;
         --q->size;
         if(q->size != 0){
             q->head = q->head->next;
@@ -40,7 +42,8 @@ struct node popQueue(struct queue* q){
         }
 
     }
-    return headNode;
+    free(headNodeAddress);
+    return headNodeCopy;
 }
 
 struct queue newQueue(){
@@ -48,6 +51,12 @@ struct queue newQueue(){
     q.size = 0;
 
     return q;
+}
+
+void freeQueue(struct queue* q){
+    while(q->size != 0){
+        popQueue(q);
+    }
 }
 
 

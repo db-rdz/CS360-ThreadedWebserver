@@ -220,14 +220,12 @@ void parseBody(unsigned char buffer[BUFFER_MAX], struct request *r){
 
 void getContentType(struct request *r, char *contentType){
     if(verbose_flag) printf("\nFIGURING CONTENT TYPE\n");
-    char* extension;
+    char extension[64];
     char *c = strchr(r->rl.path,'.'); //Find the '.' of the file extension.
     if(c){
-        extension = (char*)malloc(sizeof(char)*strlen(c));
-        strcpy(extension, c);
+        strcpy(extension, ++c);
         if(verbose_flag) printf("  Found extension %s\n", extension);
 
-        ++extension;
         if(strcmp(extension, "php") == 0){
             if(verbose_flag) printf("  Found a dynamic extension. Setting type to text/html\n");
             strcpy(contentType,"text/html");
@@ -246,7 +244,6 @@ void getContentType(struct request *r, char *contentType){
 
     if(verbose_flag) printf("  File has no extension. Setting content type to default: text/plain");
     strcpy(contentType,"text/plain");
-    free(extension);
 }
 
 void buildResponseHeader(struct request *r, char *send_buffer){
@@ -368,6 +365,14 @@ void sendResponseHeader(char *send_buffer, int sock){
     //--------------------LOOP UNTIL ALL BYTES ARE SENT-------------------//
     do {
         bytes_sent = send(sock, send_buffer_ptr, strlen(send_buffer), 0);
+        if(bytes_sent == -1) {
+            if (errno == EINTR) { /* this means we were interrupted by our signal handler */
+                if (_keepAccepting == 0) { /* g_running is set to 0 by the SIGINT handler we made */
+                    printf("  Terminating on sendResponseHeader()\n");
+                    exit(EXIT_SUCCESS);
+                }
+            }
+        }
         if(verbose_flag) printf("  Sent %i bytes of %i\n", bytes_sent, strlen(send_buffer));
         send_buffer_ptr += bytes_sent;
     }while(bytes_sent < strlen(send_buffer));
@@ -495,9 +500,13 @@ void sendResponse(char *send_buffer, int sock, struct request *r){
         do
         {
             int numsent = send(sock, send_buffer_ptr, numread, 0);
-            if( numsent < 1 ) // 0 if disconnected, otherwise error
-            {
-                break; // timeout or error
+            if(numsent == -1) {
+                if (errno == EINTR) { /* this means we were interrupted by our signal handler */
+                    if (_keepAccepting == 0) { /* g_running is set to 0 by the SIGINT handler we made */
+                        printf("  Terminating on sendResponse()\n");
+                        exit(EXIT_SUCCESS);
+                    }
+                }
             }
             send_buffer_ptr += numsent;
             numread -= numsent; //numread becomes the number of bytes left to send.

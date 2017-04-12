@@ -16,35 +16,7 @@
 void usage(char* name);
 int init_tcp(char* path, char* port, int verbose,  int threads, int queueSize);
 
-void my_sigchld_handler(int sig)
-{
-    printf("SIGNAL REAPER CALLED \n");
-    pid_t p;
-    int status;
-
-    while ((p=waitpid(-1, &status, WNOHANG)) != -1)
-    {
-        if(p==0){
-            break;
-        }
-       printf("REAPED CHILD PROCESS WITH ID: %i", p);
-    }
-}
-
-void inthandler(int sig)
-{
-    _keepAccepting = 0;
-}
-
 int main(int argc, char* argv[]) {
-
-    struct sigaction sa;
-
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = my_sigchld_handler;
-    sigaction(SIGCHLD, &sa, NULL);
-
-    signal(SIGINT, inthandler);
 
 	char* port = NULL;
 	char* config_path = NULL;

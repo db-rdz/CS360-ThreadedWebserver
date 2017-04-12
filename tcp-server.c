@@ -13,9 +13,6 @@
 
 #define BUFFER_MAX	1024
 
-//--------------------------FLAGS-------------------------------//
-int _keepAccepting;
-
 //------------------------CONF VARS-----------------------------//
 int _queueSize;
 int _threadNumber;
@@ -43,11 +40,39 @@ int sem_wait(sem_t *sem);
 int sem_post(sem_t *sem);
 int sem_init(sem_t *sem, int pshared, unsigned int value);
 
+
+void my_sigchld_handler(int sig)
+{
+    printf("SIGNAL REAPER CALLED \n");
+    pid_t p;
+    int status;
+
+    while ((p=waitpid(-1, &status, WNOHANG)) != -1)
+    {
+        if(p==0){
+            break;
+        }
+        printf("REAPED CHILD PROCESS WITH ID: %i", p);
+    }
+}
+
+void inthandler(int sig)
+{
+    _keepAccepting = 0;
+}
+
 void consumeClient(){
     printf("\nCONSUME CLIENT FUCNTION\n");
-    while(1){
+    while(_keepAccepting){
         printf("  sem_wait called\n");
-        sem_wait(&_clientsInQueue);
+        if (sem_wait(&_clientsInQueue) == -1){
+            if (errno == EINTR) { /* this means we were interrupted by our signal handler */
+                if (_keepAccepting == 0) { /* g_running is set to 0 by the SIGINT handler we made */
+                    printf("  Terminating on consumeClient()\n");
+                    break;
+                }
+            }
+        }
         pthread_mutex_lock(&m);
         printf("  Getting client from queue\n");
         struct node c = popQueue(&_clientQueue);
@@ -55,7 +80,7 @@ void consumeClient(){
         sem_post(&_queueEmptySpots);
         printf("   Handling client: %i\n", c.client);
         printf("  Size of the queue is: %i", _clientQueue.size);
-            handle_client(c.client);
+        handle_client(c.client);
     }
 }
 
@@ -66,19 +91,45 @@ void createWorkerThreads(){
     threads = (pthread_t*)malloc(_threadNumber * sizeof(pthread_t));
     for (int i = 0; i < _threadNumber; i++) {
         printf("  thread number %i created\n", i);
-        param_t* param = malloc(sizeof(param_t));
-        param->id = i;
-        pthread_create(&threads[i], NULL, consumeClient, (void*)param);
+        pthread_create(&threads[i], NULL, consumeClient, NULL);
     }
 }
 
 void killThreads(){
+    printf("\n\nKILLING THREADS\n\n");
+    printf("Number of threads: %i\n", _threadNumber);
     for(int i = 0; i < _threadNumber; i++){
-        pthread_kill(threads[i], SIGINT);
+        printf("%i\n", i);
+        printf("error code: %i\n", pthread_kill(threads[i], SIGINT));
+
     }
+
+    printf("\n\nJOINNING THREADS\n\n");
+    for(int i = 0; i < _threadNumber; i++){
+        if(pthread_join(threads[i], NULL) != 0){
+            perror("pthread_join");
+        }
+    }
+
+    freeQueue(&_clientQueue);
+    free(threads);
+    printf("\n\nKILLING THREADS END\n\n");
+    exit(EXIT_SUCCESS);
 }
 
 int init_tcp(char* path, char* port, int verbose, int threads, int queueSize) {
+
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = my_sigchld_handler;
+    sigaction(SIGCHLD, &sa, NULL);
+
+    struct sigaction sa2;
+    memset(&sa2, 0, sizeof(sa2));
+    sa2.sa_handler = inthandler;
+
+    sigaction(SIGINT, &sa2, NULL);
+
 
     //------------------------------INIT MUTEX AND SEMAPHORES-------------------------//
     pthread_mutex_init(&m, NULL);
@@ -107,12 +158,11 @@ int init_tcp(char* path, char* port, int verbose, int threads, int queueSize) {
 		socklen_t client_addr_len = sizeof(client_addr);
 
 		int client = accept(sock, (struct sockaddr*)&client_addr, &client_addr_len);
-
 		if (client == -1) {
-
             if (errno == EINTR) { /* this means we were interrupted by our signal handler */
-                if (g_running == 0) { /* g_running is set to 0 by the SIGINT handler we made */
-                    // FREE MEMORY AND EXIT
+                if (_keepAccepting == 0) { /* g_running is set to 0 by the SIGINT handler we made */
+                    printf("\nBREAKING OUT OF MAIN LOOP\n");
+                    break;
                 }
             }
 
@@ -121,7 +171,14 @@ int init_tcp(char* path, char* port, int verbose, int threads, int queueSize) {
 		}
 		else{
             printf("\nGOT CLIENT\n");
-            sem_wait(&_queueEmptySpots);
+
+            if(sem_wait(&_queueEmptySpots) == -1) {
+                if (errno == EINTR) { /* this means we were interrupted by our signal handler */
+                    if (_keepAccepting == 0) { /* g_running is set to 0 by the SIGINT handler we made */
+                       break;
+                    }
+                }
+            }
             printf(" Free space in queue available\n");
             pthread_mutex_lock(&m);
             printf("  Pushing client %i to the queue\n", client);
@@ -171,8 +228,16 @@ void handle_client(int sock) {
     resetParsingHeaderFlags(&parsing_request);
 
 
-	while (1) {
+	while (_keepAccepting) {
 		int bytes_read = recv(sock, buffer, BUFFER_MAX-1, 0);
+        if(bytes_read == -1){
+            if (errno == EINTR) { /* this means we were interrupted by our signal handler */
+                if (_keepAccepting == 0) { /* g_running is set to 0 by the SIGINT handler we made */
+                    printf("  Terminating on handle_client()\n");
+                    break;
+                }
+            }
+        }
 		if (bytes_read == 0) {
 			if(verbose_flag) printf("Peer disconnected\n");
 			close(sock);

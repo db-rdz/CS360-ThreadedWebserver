@@ -44,6 +44,8 @@ void parseConfig(char *filename){
     //TODO: only print if verbose mode is on...
 	printConfigOptions();
 
+	fclose(fp);
+
 }
 
 void printConfigOptions(){

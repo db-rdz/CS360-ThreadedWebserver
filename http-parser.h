@@ -91,3 +91,6 @@ void executeRequest(struct request *r, int sock);
 //STAT FUNCTION DECLARATION:
 int stat(const char *path, struct stat *buf);
 ssize_t send(int s, const void *buf, size_t len, int flags);
+
+//--------------------------FLAGS-------------------------------//
+int _keepAccepting;
