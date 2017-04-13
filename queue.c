@@ -49,6 +49,7 @@ struct node popQueue(struct queue* q){
 struct queue newQueue(){
     struct queue q;
     q.size = 0;
+    q.head = 0;
 
     return q;
 }
