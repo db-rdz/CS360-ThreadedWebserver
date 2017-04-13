@@ -227,27 +227,31 @@ void handle_client(int sock) {
     resetParsingHeader(&parsing_request);
     resetParsingHeaderFlags(&parsing_request);
 
+    int multipleRequests = 0;
 
 	while (_keepAccepting) {
-		int bytes_read = recv(sock, buffer, BUFFER_MAX-1, 0);
-        if(bytes_read == -1){
-            if (errno == EINTR) { /* this means we were interrupted by our signal handler */
-                if (_keepAccepting == 0) { /* g_running is set to 0 by the SIGINT handler we made */
-                    printf("  Terminating on handle_client()\n");
-                    break;
+        if(!multipleRequests) {
+            int bytes_read = recv(sock, buffer, BUFFER_MAX - 1, 0);
+
+            if (bytes_read == -1) {
+                if (errno == EINTR) { /* this means we were interrupted by our signal handler */
+                    if (_keepAccepting == 0) { /* g_running is set to 0 by the SIGINT handler we made */
+                        printf("  Terminating on handle_client()\n");
+                        break;
+                    }
                 }
             }
+            if (bytes_read == 0) {
+                if (verbose_flag) printf("Peer disconnected\n");
+                close(sock);
+                break;
+            }
+            if (bytes_read < 0) {
+                perror("recv");
+                break;
+            }
+            buffer[bytes_read] = '\0';
         }
-		if (bytes_read == 0) {
-			if(verbose_flag) printf("Peer disconnected\n");
-			close(sock);
-            break;
-		}
-		if (bytes_read < 0) {
-			perror("recv");
-			break;
-		}
-		buffer[bytes_read] = '\0';
 		if(verbose_flag) printf("RECEIVED:\n  %s\n", buffer);
 
         struct request r;
@@ -270,6 +274,19 @@ void handle_client(int sock) {
             if(!parsing_request.is_body_parsed){
                 continue;
             }
+        }
+
+        char *buffer_ptr = &buffer;
+        int buffer_length = strlen(buffer_ptr);
+        buffer_ptr += buffer_length+4;
+        printf("buffer: %s\n", buffer_ptr);
+        if( strstr(buffer_ptr, "\r\n\r\n")){
+            printf("Found multiple requests\n");
+            strcpy(buffer, buffer_ptr);
+            multipleRequests = 1;
+        } else{
+            printf("Not multiple requests\n");
+            multipleRequests = 0;
         }
 
         sanitize_path(&parsing_request);
